@@ -21,13 +21,14 @@
 #include "Gamepad.h"
 
 #include "ee_creature.h"
+#include "platform.h"
 
 int g_windowW = 1280;
 int g_windowH = 720;
 XY unscaledWindowSize = {g_windowW, g_windowH};
 int renderScale = 1;
 SDL_Texture* viewport = NULL;
-std::string g_programDirectory = "";
+PlatformNativePathString g_programDirectory = "";
 
 SDL_Window* g_wd;
 SDL_Renderer* g_rd;
@@ -163,9 +164,11 @@ int main(int argc, char** argv)
     for (int arg = 1; arg < argc; arg++) {
         g_cmdlineArgs.push_back(std::string(argv[arg]));
     }
-    g_programDirectory = std::string(argv[0]);
-    g_programDirectory = g_programDirectory.substr(0, g_programDirectory.find_last_of("/\\"));
+    //g_programDirectory = std::string(argv[0]);
+    //g_programDirectory = g_programDirectory.substr(0, g_programDirectory.find_last_of("/\\"));
     //g_addNotification(Notification("", g_programDirectory));
+
+    g_programDirectory = platformExecutableDirLocation();
 
     srand(time(NULL));
 
@@ -387,10 +390,10 @@ int main(int argc, char** argv)
                 double reverseAnimTimer = 1.0 - animTimer;
                 XY windowOffset = { g_windowW / 16 , g_windowH / 16 };
                 SDL_Rect rect = {
-                    windowOffset.x * reverseAnimTimer,
-                    windowOffset.y * reverseAnimTimer,
-                    g_windowW - 2 * windowOffset.x * reverseAnimTimer,
-                    g_windowH - 2 * windowOffset.y * reverseAnimTimer,
+                    windowOffset.x * (int) reverseAnimTimer,
+                    windowOffset.y * (int) reverseAnimTimer,
+                    g_windowW - 2 * windowOffset.x * (int) reverseAnimTimer,
+                    g_windowH - 2 * windowOffset.y * (int) reverseAnimTimer,
                 };
                 SDL_SetRenderDrawColor(g_rd, 255, 255, 255, 0xd0 * reverseAnimTimer);
                 SDL_RenderDrawRect(g_rd, &rect);

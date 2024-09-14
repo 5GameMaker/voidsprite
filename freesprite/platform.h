@@ -12,6 +12,8 @@
 #define PlatformFileModeWB "wb"
 #endif
 
+#include "Layer.h"
+
 void platformPreInit();
 void platformInit();
 void platformPostInit();
@@ -21,6 +23,8 @@ void platformTryLoadImageFile(EventCallbackListener* caller);
 void platformTrySaveOtherFile(EventCallbackListener* caller, std::vector<std::pair<std::string,std::string>> filetypes, std::string windowTitle, int evt_id);
 void platformTryLoadOtherFile(EventCallbackListener* listener, std::vector<std::pair<std::string, std::string>> filetypes, std::string windowTitle, int evt_id);
 void platformOpenFileLocation(PlatformNativePathString path);
+
+PlatformNativePathString platformExecutableDirLocation();
 
 Layer* platformGetImageFromClipboard();
 

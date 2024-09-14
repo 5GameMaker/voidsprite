@@ -2,17 +2,18 @@
 #include "Notification.h"
 #include "EditorLayerPicker.h"
 #include "FileIO.h"
+#include "imagecdylib/include/imagecdylib"
 #include "maineditor.h"
-#include "MainEditorPalettized.h"
 #include "LayerPalettized.h"
-#include "libpng/png.h"
-#include "libtga/tga.h"
+//#include "libpng/png.h"
 #include "ddspp/ddspp.h"
 #include "easybmp/EasyBMP.h"
+#include "mathops.h"
 #include "zip/zip.h"
 #include "pugixml/pugixml.hpp"
 #include "astc_dec/astc_decomp.h"
 #include "base64/base64.hpp"
+#include <cstdio>
 
 enum VTFFORMAT
 {
@@ -118,7 +119,7 @@ int DeASTC(Layer* ret, int width, int height, uint64_t fileLength, FILE* infile,
 
     }
 
-    printf("[ASTC] at %x / %x\n", ftell(infile), fileLength); 
+    printf("[ASTC] at %x / %x\n", (int) ftell(infile), (int) fileLength); 
     return astcErrors;
 }
 
@@ -146,8 +147,8 @@ LayerPalettized* De4BPPBitplane(int width, int height, uint8_t* input)
                     uint8_t value2 = (((byteBP2 >> (7 - posX)) & 1) << 2);
                     uint8_t value3 = (((byteBP3 >> (7 - posX)) & 1) << 3);
                     XY pixelPosNow = {
-                        tileX * 8 + posX,
-						tileY * 8 + posY
+                        (int) tileX * 8 + posX,
+						(int) tileY * 8 + posY
                     };
                     colorTable[pixelPosNow.x + pixelPosNow.y * width] = value0 | value1 | value2 | value3;
                 }
@@ -686,23 +687,9 @@ Layer* readXYZ(PlatformNativePathString path, uint64_t seek)
     return NULL;
 }
 
-
-size_t readPNGBytes = 0;   //if you promise to tell noone
-size_t PNGFileSize = 0;
-void _readPNGDataFromMem(png_structp png_ptr, png_bytep outBytes, png_size_t byteCountToRead) {
-    png_voidp io_ptr = png_get_io_ptr(png_ptr);
-    if (io_ptr == NULL) {
-        printf("WHY  IS io_ptr NULL\n");
-        return;
-    }
-
-    char* inputStream = (char*)io_ptr;
-    memcpy(outBytes, inputStream + readPNGBytes, byteCountToRead);
-    readPNGBytes += byteCountToRead;
-}
-
 //todo: don't just copy code come on
 Layer* readPNGFromMem(uint8_t* data, size_t dataSize) {
+    /* A rewrite attempt
     png_structp png = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
     png_infop info = png_create_info_struct(png);
     readPNGBytes = 0;
@@ -773,9 +760,29 @@ Layer* readPNGFromMem(uint8_t* data, size_t dataSize) {
     png_destroy_read_struct(&png, &info, NULL);
 
     return nlayer;
+    */
+
+    auto read = libimage::read::buffer(data, dataSize);
+    if (!read.fine) {
+        printf("%s\n", read.error.c_str());
+        exit(1);
+    }
+    auto image = read.value.image(LIBIMAGE_IMAGEFORMAT_PNG);
+    if (!image.fine) {
+        printf("%s\n", image.error.c_str());
+        exit(1);
+    }
+    auto metrics = image.value.metrics();
+
+    Layer* layer = new Layer(metrics.width, metrics.height);
+    layer->name = "PNG Image";
+    image.value.to_rgba8888(layer->pixelData);
+
+    return layer;
 }
 Layer* readPNG(PlatformNativePathString path, uint64_t seek)
 {
+    /*
     FILE* pngfile = platformOpenFile(path, PlatformFileModeRB);
     if (pngfile != NULL) {
         png_structp png = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
@@ -799,6 +806,31 @@ Layer* readPNG(PlatformNativePathString path, uint64_t seek)
 
             for (int x = 0; x < num_palette; x++) {
                 ret2->palette.push_back(0xFF000000 | (palette[x].red << 16) | (palette[x].green << 8) | palette[x].blue);
+    int numchannels = png_get_channels(png, info);
+    png_bytepp rows = new png_bytep[height];
+    for (int y = 0; y < height; y++) {
+        rows[y] = new png_byte[png_get_rowbytes(png, info)];
+    }
+    png_read_image(png, rows);
+
+    Layer* nlayer = new Layer(width, height);
+    nlayer->name = "PNG Image";
+    *if (numchannels != 4) {
+        printf("hey!!!!!! don't do this yet\n");
+    }*
+
+    int imagePointer = 0;
+    for (uint32_t y = 0; y < height; y++) {
+        if (numchannels == 4) {
+            memcpy(nlayer->pixelData + (y * numchannels * width), rows[y], width * numchannels);
+        }
+        else if (numchannels == 3) {
+            int currentRowPointer = 0;
+            for (uint32_t x = 0; x < width; x++) {
+                nlayer->pixelData[imagePointer++] = 0xff;
+                nlayer->pixelData[imagePointer++] = rows[y][currentRowPointer++];
+                nlayer->pixelData[imagePointer++] = rows[y][currentRowPointer++];
+                nlayer->pixelData[imagePointer++] = rows[y][currentRowPointer++];
             }
 
             if (png_get_valid(png, info, PNG_INFO_tRNS)) {
@@ -893,6 +925,42 @@ Layer* readPNG(PlatformNativePathString path, uint64_t seek)
         return ret;
     }
     return NULL;
+
+    if (numchannels == 4) {
+        SDL_Surface* convSrf = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_ABGR8888);
+        memcpy(convSrf->pixels, nlayer->pixelData, height * width * 4);
+        SDL_ConvertPixels(width, height, SDL_PIXELFORMAT_ABGR8888, convSrf->pixels, convSrf->pitch, SDL_PIXELFORMAT_ARGB8888, nlayer->pixelData, width * 4);
+        SDL_FreeSurface(convSrf);
+    }
+
+    for (uint32_t y = 0; y < height; y++) {
+        delete[] rows[y];
+    }
+    delete[] rows;
+    png_destroy_read_struct(&png, &info, NULL);
+
+    fclose(pngfile);
+
+    return nlayer;
+    */
+    auto cpath = convertStringOnWin32(path);
+    auto read = libimage::read::file(cpath);
+    if (!read.fine) {
+        printf("%s\n", read.error.c_str());
+        return NULL;
+    }
+    auto image = read.value.image(LIBIMAGE_IMAGEFORMAT_PNG);
+    if (!image.fine) {
+        printf("%s\n", image.error.c_str());
+        return NULL;
+    }
+    auto metrics = image.value.metrics();
+
+    Layer* layer = new Layer(metrics.width, metrics.height);
+    layer->name = "PNG Image";
+    image.value.to_rgba8888(layer->pixelData);
+
+    return layer;
 }
 
 Layer* readTGA(std::string path, uint64_t seek) {
@@ -1926,7 +1994,7 @@ bool writePNG(PlatformNativePathString path, Layer* data)
     // exports png
     FILE* outfile = platformOpenFile(path, PlatformFileModeWB);
     if (outfile != NULL) {
-        png_structp outpng = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+        /*png_structp outpng = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
         png_infop outpnginfo = png_create_info_struct(outpng);
         setjmp(png_jmpbuf(outpng));
         png_init_io(outpng, outfile);
@@ -1993,6 +2061,36 @@ bool writePNG(PlatformNativePathString path, Layer* data)
 
         png_destroy_write_struct(&outpng, &outpnginfo);
         fclose(outfile);
+        return true;*/
+        
+        auto image = libimage::dynamic_image::from_rgba8888(data->pixelData, data->w, data->h);
+        auto buf_w = libimage::write::expanding();
+        auto result = image.write(buf_w, LIBIMAGE_IMAGEFORMAT_PNG);
+
+        if (!result.fine)
+            g_addNotification(ErrorNotification("Error", result.error));
+        return result.fine;
+
+        auto buf_r = libimage::read::from_write(buf_w).value;
+
+        char* buf = new char[8192];
+
+        while (true) {
+            auto poll = buf_r.poll(buf, 8192);
+            if (!poll.fine) {
+                delete [] buf;
+                fclose(outfile);
+                g_addNotification(ErrorNotification("Error", poll.error));
+                return false;
+            }
+            if (poll.value == 0) break;
+            fwrite(buf, 1, poll.value, outfile);
+        }
+
+        delete [] buf;
+
+        fclose(outfile);
+
         return true;
     }
     return false;
@@ -2565,7 +2663,7 @@ bool writeHTMLBase64(PlatformNativePathString path, Layer* data)
         if (writePNG("temp.bin", data)) {
 #endif
             //open temp.bin file, convert to base64, write to outfile
-            FILE* infile = platformOpenFile(L"temp.bin", PlatformFileModeRB);
+            FILE* infile = platformOpenFile(convertStringOnWin32("temp.bin"), PlatformFileModeRB);
             if (infile != NULL) {
                 fseek(infile, 0, SEEK_END);
                 uint64_t fileLength = ftell(infile);

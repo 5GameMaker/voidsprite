@@ -1,0 +1,3 @@
+[submodule "freesprite/imagecdylib"]
+	path = freesprite/imagecdylib
+	url = https://github.com/5GameMaker/imagecdylib.git

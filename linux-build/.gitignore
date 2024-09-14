@@ -1,0 +1,6 @@
+*
+!.gitignore
+!CMakeLists.txt
+!/build.sh
+!/lib
+!/_voidsprite.sh

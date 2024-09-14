@@ -19,11 +19,22 @@
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
  
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "tga.h"
 #include "tga_private.h"
+
+#ifdef __linux__
+typedef int errno_t;
+errno_t fopen_s(FILE *restrict *restrict streamptr,
+                const char *restrict filename,
+                const char *restrict mode) {
+    *streamptr = fopen(filename, mode);
+    return errno;
+}
+#endif
 
 const char *
 tga_error_strings[] =
