@@ -13,6 +13,7 @@
 #include "pugixml/pugixml.hpp"
 #include "astc_dec/astc_decomp.h"
 #include "base64/base64.hpp"
+#include "MainEditorPalettized.h"
 #include <cstdio>
 
 enum VTFFORMAT
@@ -1931,7 +1932,7 @@ MainEditor* loadAnyIntoSession(std::string utf8path)
 #if _WIDEPATHS
     fPath = utf8StringToWstring(utf8path);
 #else
-    fPath = path;
+    fPath = utf8path;
 #endif
 
     for (FileSessionImportNPath importer : g_fileSessionImportersNPaths) {
